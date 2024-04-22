@@ -1,9 +1,8 @@
-use std::io::Cursor;
-use byteorder::{BigEndian, ReadBytesExt};
-
 fn main() {
     let rdr = vec![2, 3, 4, 5];
-    let mut buf = Cursor::new(&rdr);
-    buf.read_u16::<BigEndian>().unwrap();
-    println!("{}", buf.position());
+    let b1 = &rdr[0..2];
+    let b2 = &rdr[..];
+    if b1 <= b2 {
+        println!("ok")
+    }
 }
