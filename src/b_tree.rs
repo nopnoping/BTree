@@ -1,10 +1,11 @@
-use crate::b_node::{BNode, BType};
+use crate::b_node::{BNode, BTREE_PAGE_SIZE, BType};
 
-const BTREE_PAGE_SIZE: usize = 4096;
-const BTREE_MAX_KEY_SIZE: usize = 1000;
-const BTREE_MAX_VAL_SIZE: usize = 3000;
-
-struct BTree {}
+struct BTree {
+    root: u64,
+    get: fn(u64) -> BNode,
+    new: fn(&BNode) -> u64,
+    del: fn(u64),
+}
 
 impl BTree {
     fn insert(&mut self, node: &BNode, key: &[u8], val: &[u8]) -> BNode {
@@ -36,9 +37,19 @@ impl BTree {
     fn leaf_update(&self, new: &mut BNode, old: &BNode, idx: u16, key: &[u8], val: &[u8]) {
         new.set_header(BType::LEAF, old.n_keys());
         new.copy_range(old, 0, 0, idx);
-        new.insert_kv(idx, old.get_ptr(idx), key, val);
+        new.insert_kv(idx, 0, key, val);
         new.copy_range(old, idx + 1, idx + 1, old.n_keys() - idx - 1);
     }
 
-    fn node_insert(&self, new: &mut BNode, old: &BNode, idx: u16, key: &[u8], val: &[u8]) {}
+    fn node_insert(&mut self, new: &mut BNode, node: &BNode, idx: u16, key: &[u8], val: &[u8]) {
+        // get next level node
+        let k_ptr = node.get_ptr(idx);
+        let mut k_node = (self.get)(k_ptr);
+        (self.del)(k_ptr);
+        // insert
+        k_node = self.insert(&mut k_node, key, val);
+        // split
+        let vec = k_node.split();
+        // update
+    }
 }

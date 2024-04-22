@@ -1,10 +1,14 @@
-const HEADER: usize = 4;
+pub const HEADER: usize = 4;
+pub const BTREE_PAGE_SIZE: usize = 4096;
+pub const BTREE_MAX_KEY_SIZE: usize = 1000;
+pub const BTREE_MAX_VAL_SIZE: usize = 3000;
 
 pub enum BType {
     Node = 1,
     LEAF = 2,
 }
 
+#[derive(Clone)]
 pub struct BNode {
     data: Vec<u8>,
 }
@@ -15,6 +19,10 @@ impl BNode {
         BNode {
             data: Vec::with_capacity(size)
         }
+    }
+
+    fn resize(&mut self, size: usize) {
+        self.data.resize(size, 0);
     }
 
     pub fn n_type(&self) -> BType {
@@ -150,6 +158,42 @@ impl BNode {
         self.byte_copy(pos + 4 + key.len() as u16, val);
         // offset
         self.set_offset(idx + 1, self.get_offset(idx) + 4 + (key.len() + val.len()) as u16)
+    }
+
+    pub fn split(&mut self) -> Vec<BNode> {
+        if self.n_bytes() <= BTREE_PAGE_SIZE as u16 {
+            self.resize(BTREE_PAGE_SIZE);
+            return vec![self.clone()];
+        }
+        let (mut left, right) = self.split2();
+        if left.n_keys() <= BTREE_PAGE_SIZE as u16 {
+            left.resize(0);
+            return vec![left, right];
+        }
+        let (left, middle) = left.split2();
+        assert!(left.n_bytes() <= BTREE_PAGE_SIZE as u16);
+        vec![left, middle, right]
+    }
+    fn split2(&mut self) -> (BNode, BNode) {
+        let mut left = BNode::new(2 * BTREE_PAGE_SIZE);
+        let mut right = BNode::new(BTREE_PAGE_SIZE);
+
+        let mut idx = self.n_keys() - 1;
+        loop {
+            let nk = self.n_keys() - idx;
+            let kv_size = self.get_offset(self.n_keys()) - self.get_offset(idx);
+            let size = HEADER as u16 + 8 * nk + 2 * nk + kv_size;
+            if size >= BTREE_PAGE_SIZE as u16 { break; }
+            idx -= 1;
+        }
+
+        right.set_header(self.n_type(), self.n_keys() - idx);
+        right.copy_range(self, 0, idx, self.n_keys() - idx);
+
+        left.set_header(self.n_type(), idx - 1);
+        left.copy_range(self, 0, 0, idx - 1);
+
+        (left, right)
     }
 }
 
