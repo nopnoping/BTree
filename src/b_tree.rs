@@ -41,15 +41,21 @@ impl BTree {
         new.copy_range(old, idx + 1, idx + 1, old.n_keys() - idx - 1);
     }
 
-    fn node_insert(&mut self, new: &mut BNode, node: &BNode, idx: u16, key: &[u8], val: &[u8]) {
+    fn node_insert(&mut self, new: &mut BNode, old: &BNode, idx: u16, key: &[u8], val: &[u8]) {
         // get next level node
-        let k_ptr = node.get_ptr(idx);
+        let k_ptr = old.get_ptr(idx);
         let mut k_node = (self.get)(k_ptr);
         (self.del)(k_ptr);
         // insert
         k_node = self.insert(&mut k_node, key, val);
         // split
-        let vec = k_node.split();
+        let childs = k_node.split();
         // update
+        new.set_header(BType::Node, old.n_keys() + childs.len() - 1);
+        new.copy_range(old, 0, 0, idx);
+        for i in 0..childs.len() {
+            new.insert_kv(idx + i, (self.new)(&childs[0]), childs[0].get_key(0), &[]);
+        }
+        new.copy_range(old, idx + childs.len(), idx + 1, old.n_keys() - (idx + 1));
     }
 }
