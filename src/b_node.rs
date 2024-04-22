@@ -21,10 +21,7 @@ impl BNode {
         }
     }
 
-    fn resize(&mut self, size: usize) {
-        self.data.resize(size, 0);
-    }
-
+    // basic info
     pub fn n_type(&self) -> BType {
         if self.read_u16(0) == 1 {
             BType::Node
@@ -32,37 +29,32 @@ impl BNode {
             BType::LEAF
         }
     }
-
     pub fn n_keys(&self) -> u16 {
         self.read_u16(2)
     }
-
     fn n_bytes(&self) -> u16 {
         self.kv_pos(self.n_keys())
     }
 
+    // header
     pub fn set_header(&mut self, n_type: BType, n_keys: u16) {
         self.write_u16(0, n_type as u16);
         self.write_u16(2, n_keys);
     }
 
+    // ptr
     pub fn get_ptr(&self, idx: u16) -> u64 {
         assert!(idx < self.n_keys());
         let pos = HEADER + idx as usize * 8;
         self.read_u64(pos)
     }
-
     pub fn set_ptr(&mut self, idx: u16, val: u64) {
         assert!(idx < self.n_keys());
         let pos = HEADER + idx as usize * 8;
         self.write_u64(pos, val)
     }
 
-    fn offset_pos(&self, idx: u16) -> u16 {
-        assert!(idx >= 0 && idx <= self.n_keys());
-        HEADER as u16 + 8 * self.n_keys() + 2 * (idx - 1)
-    }
-
+    // pos
     pub fn get_offset(&self, idx: u16) -> u16 {
         if idx == 0 {
             0
@@ -70,38 +62,43 @@ impl BNode {
             self.read_u16(self.offset_pos(idx) as usize)
         }
     }
-
     pub fn set_offset(&mut self, idx: u16, offset: u16) {
         self.write_u16(self.offset_pos(idx) as usize, offset)
     }
-
-    pub fn kv_pos(&self, idx: u16) -> u16 {
-        assert!(idx <= self.n_keys());
-        HEADER as u16 + 8 & self.n_keys() + 2 * self.n_keys() + self.get_offset(idx)
+    fn offset_pos(&self, idx: u16) -> u16 {
+        assert!(idx > 0 && idx <= self.n_keys());
+        HEADER as u16 + 8 * self.n_keys() + 2 * (idx - 1)
     }
 
+    // kv
     pub fn get_key(&self, idx: u16) -> &[u8] {
         assert!(idx < self.n_keys());
         let pos = self.kv_pos(idx);
         let k_len = self.read_u16(pos as usize);
         &self.data[pos as usize + 4..][..k_len as usize]
     }
-
-    fn get_val(&self, idx: u16) -> &[u8] {
+    pub fn get_val(&self, idx: u16) -> &[u8] {
         assert!(idx < self.n_keys());
         let pos = self.kv_pos(idx);
         let k_len = self.read_u16(pos as usize);
         let v_len = self.read_u16(pos as usize + 2);
         &self.data[(pos + 4 + k_len) as usize..][..v_len as usize]
     }
+    pub fn kv_pos(&self, idx: u16) -> u16 {
+        assert!(idx <= self.n_keys());
+        HEADER as u16 + 8 & self.n_keys() + 2 * self.n_keys() + self.get_offset(idx)
+    }
 
+    // data
+    fn resize(&mut self, size: usize) {
+        self.data.resize(size, 0);
+    }
     fn byte_copy(&mut self, start: u16, val: &[u8]) {
         assert!(start as usize + val.len() <= self.data.len());
         for i in 0..val.len() {
             self.data[start as usize + i] = val[i];
         }
     }
-
     fn get_bytes(&self, start: u16, end: u16) -> &[u8] {
         assert!(end as usize <= self.data.len());
         &self.data[start as usize..end as usize]
@@ -110,6 +107,7 @@ impl BNode {
 
 // Domain
 impl BNode {
+    // lookup key
     pub fn lookup_le(&self, key: &[u8]) -> u16 {
         let mut found = 0;
         for i in 0..self.n_keys() {
@@ -124,6 +122,7 @@ impl BNode {
         found
     }
 
+    // copy node from range
     pub fn copy_range(&mut self, old: &BNode, dest_new: u16, src_old: u16, n: u16) {
         assert!(src_old + n <= old.n_keys());
         assert!(dest_new + n <= self.n_keys());
@@ -147,6 +146,7 @@ impl BNode {
         self.byte_copy(self.kv_pos(dest_new), old.get_bytes(start, end));
     }
 
+    // insert a kv
     pub fn insert_kv(&mut self, idx: u16, ptr: u64, key: &[u8], val: &[u8]) {
         // ptr
         self.set_ptr(idx, ptr);
@@ -160,6 +160,7 @@ impl BNode {
         self.set_offset(idx + 1, self.get_offset(idx) + 4 + (key.len() + val.len()) as u16)
     }
 
+    // split the node to [1,2,3] nodes
     pub fn split(&mut self) -> Vec<BNode> {
         if self.n_bytes() <= BTREE_PAGE_SIZE as u16 {
             self.resize(BTREE_PAGE_SIZE);
