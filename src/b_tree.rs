@@ -10,7 +10,7 @@ struct BTree {
 impl BTree {
     // insert a kv
     fn insert(&mut self, node: &BNode, key: &[u8], val: &[u8]) -> BNode {
-        let mut new_node = BNode::new(2 * BTREE_PAGE_SIZE);
+        let mut new_node = BNode::new_with_cap(2 * BTREE_PAGE_SIZE);
 
         let idx = node.lookup_le(key);
         match node.n_type() {
@@ -18,7 +18,7 @@ impl BTree {
                 if key.cmp(node.get_key(idx)).is_eq() {
                     self.leaf_update(&mut new_node, node, idx, key, val);
                 } else {
-                    self.leaf_insert(&mut new_node, node, idx, key, val);
+                    self.leaf_insert(&mut new_node, node, idx + 1, key, val);
                 }
             }
             BType::Node => self.node_insert(&mut new_node, node, idx, key, val),

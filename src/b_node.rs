@@ -3,6 +3,7 @@ pub const BTREE_PAGE_SIZE: usize = 4096;
 pub const BTREE_MAX_KEY_SIZE: usize = 1000;
 pub const BTREE_MAX_VAL_SIZE: usize = 3000;
 
+#[derive(Eq, PartialEq, Debug)]
 pub enum BType {
     Node = 1,
     LEAF = 2,
@@ -15,10 +16,15 @@ pub struct BNode {
 
 // Basic
 impl BNode {
-    pub fn new(size: usize) -> BNode {
+    pub fn new_with_cap(size: usize) -> BNode {
+        let mut v = Vec::new();
+        v.resize(size, 0);
         BNode {
-            data: Vec::with_capacity(size)
+            data: v,
         }
+    }
+    pub fn new_with_data(data: Vec<u8>) -> BNode {
+        BNode { data }
     }
 
     // basic info
@@ -86,7 +92,7 @@ impl BNode {
     }
     pub fn kv_pos(&self, idx: u16) -> u16 {
         assert!(idx <= self.n_keys());
-        HEADER as u16 + 8 & self.n_keys() + 2 * self.n_keys() + self.get_offset(idx)
+        HEADER as u16 + 8 * self.n_keys() + 2 * self.n_keys() + self.get_offset(idx)
     }
 
     // data
@@ -110,7 +116,7 @@ impl BNode {
     // lookup key
     pub fn lookup_le(&self, key: &[u8]) -> u16 {
         let mut found = 0;
-        for i in 0..self.n_keys() {
+        for i in 1..self.n_keys() {
             let r = self.get_key(i).cmp(key);
             if r.is_le() {
                 found = i;
@@ -138,7 +144,7 @@ impl BNode {
         let src_begin = old.get_offset(src_old);
         for i in 1..=n {
             let offset = old.get_offset(src_old + i) - src_begin + dest_begin;
-            self.set_offset(dest_new + 1, offset);
+            self.set_offset(dest_new + i, offset);
         }
         // kv copy
         let start = old.kv_pos(src_old);
@@ -176,8 +182,8 @@ impl BNode {
         vec![left, middle, right]
     }
     fn split2(&mut self) -> (BNode, BNode) {
-        let mut left = BNode::new(2 * BTREE_PAGE_SIZE);
-        let mut right = BNode::new(BTREE_PAGE_SIZE);
+        let mut left = BNode::new_with_cap(2 * BTREE_PAGE_SIZE);
+        let mut right = BNode::new_with_cap(BTREE_PAGE_SIZE);
 
         let mut idx = self.n_keys() - 1;
         loop {
@@ -228,3 +234,115 @@ impl BNode {
         self.write_u32(start + 2, (data >> 32) as u32);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::b_node::{BNode, BType};
+
+    /* Basic Test */
+    fn basic_data() -> Vec<u8> {
+        vec![0x01, 0x00, // type
+             0x01, 0x00, // n key
+             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // ptr
+             0x06, 0x00, // offset
+             0x01, 0x00, 0x01, 0x00, 0xac, 0xac, // kv
+        ]
+    }
+
+    #[test]
+    fn test_basic_info() {
+        let data = basic_data();
+        let node = BNode::new_with_data(data);
+        assert_eq!(node.n_type(), BType::Node);
+        assert_eq!(node.n_keys(), 1);
+        assert_eq!(node.get_offset(1), 6);
+        assert_eq!(node.n_bytes(), 20);
+    }
+
+    #[test]
+    fn test_header() {
+        let mut node = BNode::new_with_cap(4);
+        node.set_header(BType::LEAF, 2);
+        assert_eq!(node.n_type(), BType::LEAF);
+        assert_eq!(node.n_keys(), 2);
+    }
+
+    #[test]
+    fn test_ptr() {
+        let mut node = BNode::new_with_data(basic_data());
+        node.set_ptr(0, 0xffff);
+        assert_eq!(node.get_ptr(0), 0xffff);
+    }
+
+    #[test]
+    fn test_offset() {
+        let mut node = BNode::new_with_data(basic_data());
+        node.set_offset(1, 0xcafe);
+        assert_eq!(node.get_offset(0), 0);
+        assert_eq!(node.get_offset(1), 0xcafe);
+        let t = [0xfe, 0xca];
+        assert_eq!(node.get_bytes(12, 14), &t)
+    }
+
+    #[test]
+    fn test_kv() {
+        let mut node = BNode::new_with_data(basic_data());
+        assert_eq!(node.get_key(0), &[0xac]);
+        assert_eq!(node.get_val(0), &[0xac]);
+    }
+
+    #[test]
+    fn test_data() {
+        let mut node = BNode::new_with_data(basic_data());
+        node.byte_copy(0, &[0x02, 00]);
+        assert_eq!(node.n_type(), BType::LEAF);
+        assert_eq!(node.get_bytes(0, 2), &[0x02, 00]);
+    }
+
+    /* Domain test */
+    fn domain_data() -> Vec<u8> {
+        vec![0x01, 0x00, // type
+             0x02, 0x00, // n key
+             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // ptr
+             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+             0x06, 0x00, // offset
+             0x0c, 0x00,
+             0x01, 0x00, 0x01, 0x00, 0xbc, 0xac, // kv
+             0x01, 0x00, 0x01, 0x00, 0xac, 0xac,
+        ]
+    }
+
+    #[test]
+    fn test_look_up() {
+        let mut node = BNode::new_with_data(domain_data());
+        assert_eq!(node.n_keys(), 2);
+        assert_eq!(node.lookup_le(&[0xa0]), 0);
+        assert_eq!(node.lookup_le(&[0xac]), 0);
+        assert_eq!(node.lookup_le(&[0xae]), 0);
+        assert_eq!(node.lookup_le(&[0xbf]), 1);
+    }
+
+    #[test]
+    fn test_copy_range() {
+        let mut old = BNode::new_with_data(domain_data());
+        let mut new = BNode::new_with_cap(old.n_bytes() as usize);
+        new.set_header(old.n_type(), old.n_keys());
+        new.copy_range(&old, 0, 0, old.n_keys());
+        assert_eq!(new.get_bytes(0, new.n_bytes()), old.get_bytes(0, old.n_bytes()));
+
+        let mut new2 = BNode::new_with_cap(basic_data().len());
+        new2.set_header(old.n_type(), 1);
+        new2.copy_range(&old, 0, 1, 1);
+        assert_eq!(new2.get_bytes(0, new2.n_bytes()), basic_data());
+    }
+
+    #[test]
+    fn test_insert_kv() {
+        let mut node = BNode::new_with_data(domain_data());
+        node.insert_kv(1, 0xff, &[0xbb], &[0xbb]);
+        assert_eq!(node.get_ptr(1), 0xff);
+        assert_eq!(node.get_key(1), &[0xbb]);
+        assert_eq!(node.get_val(1), &[0xbb]);
+    }
+}
+
