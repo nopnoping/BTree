@@ -173,7 +173,7 @@ impl BNode {
             return vec![self.clone()];
         }
         let (mut left, right) = self.split2();
-        if left.n_keys() <= BTREE_PAGE_SIZE as u16 {
+        if left.n_bytes() <= BTREE_PAGE_SIZE as u16 {
             left.resize(0);
             return vec![left, right];
         }
@@ -194,11 +194,13 @@ impl BNode {
             idx -= 1;
         }
 
-        right.set_header(self.n_type(), self.n_keys() - idx);
-        right.copy_range(self, 0, idx, self.n_keys() - idx);
+        // [0, idx]
+        left.set_header(self.n_type(), idx + 1);
+        left.copy_range(self, 0, 0, idx + 1);
 
-        left.set_header(self.n_type(), idx - 1);
-        left.copy_range(self, 0, 0, idx - 1);
+        // [idx+1, n_keys-1]
+        right.set_header(self.n_type(), self.n_keys() - idx - 1);
+        right.copy_range(self, 0, idx + 1, self.n_keys() - idx - 1);
 
         (left, right)
     }
@@ -237,7 +239,7 @@ impl BNode {
 
 #[cfg(test)]
 mod tests {
-    use crate::b_node::{BNode, BType};
+    use crate::b_node::{BNode, BTREE_MAX_KEY_SIZE, BTREE_MAX_VAL_SIZE, BTREE_PAGE_SIZE, BType};
 
     /* Basic Test */
     fn basic_data() -> Vec<u8> {
@@ -307,7 +309,7 @@ mod tests {
              0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
              0x06, 0x00, // offset
              0x0c, 0x00,
-             0x01, 0x00, 0x01, 0x00, 0xbc, 0xac, // kv
+             0x01, 0x00, 0x01, 0x00, 0x9c, 0xac, // kv
              0x01, 0x00, 0x01, 0x00, 0xac, 0xac,
         ]
     }
@@ -316,10 +318,11 @@ mod tests {
     fn test_look_up() {
         let mut node = BNode::new_with_data(domain_data());
         assert_eq!(node.n_keys(), 2);
+        assert_eq!(node.lookup_le(&[0x90]), 0);
+        assert_eq!(node.lookup_le(&[0x9c]), 0);
         assert_eq!(node.lookup_le(&[0xa0]), 0);
-        assert_eq!(node.lookup_le(&[0xac]), 0);
-        assert_eq!(node.lookup_le(&[0xae]), 0);
-        assert_eq!(node.lookup_le(&[0xbf]), 1);
+        assert_eq!(node.lookup_le(&[0xac]), 1);
+        assert_eq!(node.lookup_le(&[0xad]), 1);
     }
 
     #[test]
@@ -343,6 +346,23 @@ mod tests {
         assert_eq!(node.get_ptr(1), 0xff);
         assert_eq!(node.get_key(1), &[0xbb]);
         assert_eq!(node.get_val(1), &[0xbb]);
+    }
+
+    #[test]
+    fn test_split() {
+        let mut node = BNode::new_with_cap(3 * BTREE_PAGE_SIZE);
+        node.set_header(BType::LEAF, 3);
+        node.insert_kv(0, 0, &[0x11; BTREE_MAX_KEY_SIZE], &[0x11; BTREE_MAX_VAL_SIZE]);
+        node.insert_kv(1, 0, &[0x22; BTREE_MAX_KEY_SIZE], &[0x22; BTREE_MAX_VAL_SIZE]);
+        node.insert_kv(2, 0, &[0x33; BTREE_MAX_KEY_SIZE], &[0x33; BTREE_MAX_VAL_SIZE]);
+        let v = node.split();
+        assert_eq!(v.len(), 3);
+        assert_eq!(v[0].get_key(0), &[0x11; BTREE_MAX_KEY_SIZE]);
+        assert_eq!(v[0].get_val(0), &[0x11; BTREE_MAX_VAL_SIZE]);
+        assert_eq!(v[1].get_key(0), &[0x22; BTREE_MAX_KEY_SIZE]);
+        assert_eq!(v[1].get_val(0), &[0x22; BTREE_MAX_VAL_SIZE]);
+        assert_eq!(v[2].get_key(0), &[0x33; BTREE_MAX_KEY_SIZE]);
+        assert_eq!(v[2].get_val(0), &[0x33; BTREE_MAX_VAL_SIZE]);
     }
 }
 
