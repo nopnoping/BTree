@@ -4,6 +4,7 @@ pub struct BNode {
     data: Vec<u8>,
 }
 
+// Basic
 impl BNode {
     fn n_type(&self) -> u16 {
         self.read_u16(0)
@@ -70,8 +71,21 @@ impl BNode {
         let v_len = self.read_u16(pos as usize + 2);
         &self.data[(pos + 4 + k_len) as usize..][..v_len as usize]
     }
+
+    fn byte_copy(&mut self, start: u16, val: &[u8]) {
+        assert!(start as usize + val.len() <= self.data.len());
+        for i in 0..val.len() {
+            self.data[start as usize + i] = val[i];
+        }
+    }
+
+    fn get_bytes(&self, start: u16, end: u16) -> &[u8] {
+        assert!(end as usize <= self.data.len());
+        &self.data[start as usize..end as usize]
+    }
 }
 
+// Domain
 impl BNode {
     pub fn lookup_le(&self, key: &[u8]) -> u16 {
         let mut found = 0;
@@ -85,18 +99,6 @@ impl BNode {
             }
         }
         found
-    }
-
-    pub fn byte_copy(&mut self, start: u16, val: &[u8]) {
-        assert!(start as usize + val.len() <= self.data.len());
-        for i in 0..val.len() {
-            self.data[start as usize + i] = val[i];
-        }
-    }
-
-    pub fn get_bytes(&self, start: u16, end: u16) -> &[u8] {
-        assert!(end as usize <= self.data.len());
-        &self.data[start as usize..end as usize]
     }
 
     pub fn copy_range(&mut self, old: &BNode, dest_new: u16, src_old: u16, n: u16) {
@@ -136,6 +138,7 @@ impl BNode {
     }
 }
 
+// little endian
 impl BNode {
     fn read_u16(&self, start: usize) -> u16 {
         let low = self.data[start] as u16;
