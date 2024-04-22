@@ -1,13 +1,28 @@
 const HEADER: usize = 4;
 
+pub enum BType {
+    Node = 1,
+    LEAF = 2,
+}
+
 pub struct BNode {
     data: Vec<u8>,
 }
 
 // Basic
 impl BNode {
-    fn n_type(&self) -> u16 {
-        self.read_u16(0)
+    pub fn new(size: usize) -> BNode {
+        BNode {
+            data: Vec::with_capacity(size)
+        }
+    }
+
+    pub fn n_type(&self) -> BType {
+        if self.read_u16(0) == 1 {
+            BType::Node
+        } else {
+            BType::LEAF
+        }
     }
 
     pub fn n_keys(&self) -> u16 {
@@ -18,8 +33,8 @@ impl BNode {
         self.kv_pos(self.n_keys())
     }
 
-    pub fn set_header(&mut self, n_type: u16, n_keys: u16) {
-        self.write_u16(0, n_type);
+    pub fn set_header(&mut self, n_type: BType, n_keys: u16) {
+        self.write_u16(0, n_type as u16);
         self.write_u16(2, n_keys);
     }
 
@@ -57,7 +72,7 @@ impl BNode {
         HEADER as u16 + 8 & self.n_keys() + 2 * self.n_keys() + self.get_offset(idx)
     }
 
-    fn get_key(&self, idx: u16) -> &[u8] {
+    pub fn get_key(&self, idx: u16) -> &[u8] {
         assert!(idx < self.n_keys());
         let pos = self.kv_pos(idx);
         let k_len = self.read_u16(pos as usize);
