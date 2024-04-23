@@ -1,7 +1,4 @@
-pub const HEADER: usize = 4;
-pub const BTREE_PAGE_SIZE: usize = 4096;
-pub const BTREE_MAX_KEY_SIZE: usize = 1000;
-pub const BTREE_MAX_VAL_SIZE: usize = 3000;
+use crate::common::{BTREE_PAGE_SIZE, HEADER};
 
 #[derive(Eq, PartialEq, Debug)]
 pub enum BType {
@@ -38,7 +35,7 @@ impl BNode {
     pub fn n_keys(&self) -> u16 {
         self.read_u16(2)
     }
-    fn n_bytes(&self) -> u16 {
+    pub fn n_bytes(&self) -> u16 {
         self.kv_pos(self.n_keys())
     }
 
@@ -239,7 +236,9 @@ impl BNode {
 
 #[cfg(test)]
 mod tests {
-    use crate::b_node::{BNode, BTREE_MAX_KEY_SIZE, BTREE_MAX_VAL_SIZE, BTREE_PAGE_SIZE, BType};
+    use crate::common::{BTREE_MAX_KEY_SIZE, BTREE_MAX_VAL_SIZE};
+
+    use super::*;
 
     /* Basic Test */
     fn basic_data() -> Vec<u8> {

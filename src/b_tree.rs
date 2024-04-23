@@ -1,4 +1,5 @@
-use crate::b_node::{BNode, BTREE_PAGE_SIZE, BType};
+use crate::b_node::{BNode, BType};
+use crate::common::{BTREE_PAGE_SIZE, HEADER};
 
 struct BTree {
     root: u64,
@@ -26,6 +27,23 @@ impl BTree {
 
         new_node
     }
+    // delete a kv
+    fn delete(&self, node: &BNode, key: &[u8]) -> Option<BNode> {
+        let idx = node.lookup_le(key);
+        match node.n_type() {
+            BType::LEAF => {
+                if key.cmp(node.get_key(idx)).is_ne() {
+                    None
+                } else {
+                    let mut new = BNode::new_with_cap(BTREE_PAGE_SIZE);
+                    self.leaf_delete(&mut new, node, idx);
+                    Some(new)
+                }
+            }
+            BType::Node => self.node_delete(node, idx, key)
+        }
+    }
+
     fn leaf_insert(&self, new: &mut BNode, old: &BNode, idx: u16, key: &[u8], val: &[u8]) {
         new.set_header(BType::LEAF, old.n_keys() + 1);
         new.copy_range(old, 0, 0, idx);
@@ -48,11 +66,58 @@ impl BTree {
         // split
         let childs = k_node.split();
         // update
+        self.node_replace_kids(new, old, idx, &childs);
+    }
+    fn node_replace_kids(&self, new: &mut BNode, old: &BNode, idx: u16, childs: &Vec<BNode>) {
         new.set_header(BType::Node, old.n_keys() + childs.len() as u16 - 1);
         new.copy_range(old, 0, 0, idx);
         for i in 0..childs.len() as u16 {
             new.insert_kv(idx + i, (self.new)(&childs[0]), childs[0].get_key(0), &[]);
         }
         new.copy_range(old, idx + childs.len() as u16, idx + 1, old.n_keys() - (idx + 1));
+    }
+
+
+    fn leaf_delete(&self, new: &mut BNode, old: &BNode, idx: u16) {
+        new.set_header(BType::LEAF, old.n_keys() - 1);
+        new.copy_range(old, 0, 0, idx);
+        new.copy_range(old, idx, idx + 1, old.n_keys() - idx - 1);
+    }
+    fn node_delete(&self, node: &BNode, idx: u16, key: &[u8]) -> Option<BNode> {
+        let k_ptr = node.get_ptr(idx);
+        let k_node = (self.get)(k_ptr);
+        let update_node = self.delete(&k_node, key)?;
+
+        (self.del)(k_ptr);
+
+        let new = BNode::new_with_cap(BTREE_PAGE_SIZE);
+        match self.should_merge(node, &update_node, idx) {
+            Some((dir, sibling)) => {
+                if dir < 0 {} else {}
+            }
+            None => {}
+        }
+        todo!()
+    }
+    fn should_merge(&self, parent: &BNode, child: &BNode, idx: u16) -> Option<(i8, BNode)> {
+        if child.n_bytes() > BTREE_PAGE_SIZE as u16 / 4 {
+            return None;
+        }
+
+        if idx > 0 {
+            let sibling = (self.get)(parent.get_ptr(idx - 1));
+            if sibling.n_bytes() + child.n_bytes() - HEADER <= BTREE_PAGE_SIZE as u16 {
+                return Some((-1, sibling));
+            }
+        }
+
+        if idx + 1 < parent.n_keys() {
+            let sibling = (self.get)(parent.get_ptr(idx + 1));
+            if sibling.n_bytes() + child.n_bytes() - HEADER <= BTREE_PAGE_SIZE as u16 {
+                return Some((1, sibling));
+            }
+        }
+
+        None
     }
 }
