@@ -201,6 +201,13 @@ impl BNode {
 
         (left, right)
     }
+
+    // merge a node
+    pub fn merge(&mut self, left: &Self, right: &Self) {
+        self.set_header(left.n_type(), left.n_keys() + right.n_keys());
+        self.copy_range(left, 0, 0, left.n_keys());
+        self.copy_range(right, left.n_keys(), 0, right.n_keys());
+    }
 }
 
 // little endian

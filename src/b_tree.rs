@@ -66,15 +66,21 @@ impl BTree {
         // split
         let childs = k_node.split();
         // update
-        self.node_replace_kids(new, old, idx, &childs);
+        self.node_replace_n_kid(new, old, idx, &childs);
     }
-    fn node_replace_kids(&self, new: &mut BNode, old: &BNode, idx: u16, childs: &Vec<BNode>) {
+    fn node_replace_n_kid(&self, new: &mut BNode, old: &BNode, idx: u16, childs: &Vec<BNode>) {
         new.set_header(BType::Node, old.n_keys() + childs.len() as u16 - 1);
         new.copy_range(old, 0, 0, idx);
         for i in 0..childs.len() as u16 {
             new.insert_kv(idx + i, (self.new)(&childs[0]), childs[0].get_key(0), &[]);
         }
         new.copy_range(old, idx + childs.len() as u16, idx + 1, old.n_keys() - (idx + 1));
+    }
+    fn node_replace_2_kid(&self, new: &mut BNode, old: &BNode, idx: u16, ptr: u64, key: &[u8]) {
+        new.set_header(BType::Node, old.n_keys() - 1);
+        new.copy_range(old, 0, 0, idx);
+        new.insert_kv(idx, ptr, key, &[]);
+        new.copy_range(old, idx + 1, idx + 2, old.n_keys() - (idx + 2));
     }
 
 
@@ -90,14 +96,26 @@ impl BTree {
 
         (self.del)(k_ptr);
 
-        let new = BNode::new_with_cap(BTREE_PAGE_SIZE);
+        let mut new = BNode::new_with_cap(BTREE_PAGE_SIZE);
         match self.should_merge(node, &update_node, idx) {
             Some((dir, sibling)) => {
-                if dir < 0 {} else {}
+                let mut merged_child = BNode::new_with_cap(BTREE_PAGE_SIZE);
+                if dir < 0 {
+                    merged_child.merge(&sibling, &update_node);
+                    (self.del)(node.get_ptr(idx - 1));
+                    self.node_replace_2_kid(&mut new, node, idx - 1, (self.new)(&merged_child), merged_child.get_key(0));
+                } else {
+                    merged_child.merge(&update_node, &sibling);
+                    (self.del)(node.get_ptr(idx + 1));
+                    self.node_replace_2_kid(&mut new, node, idx, (self.new)(&merged_child), merged_child.get_key(0));
+                }
             }
-            None => {}
+            None => {
+                assert!(update_node.n_keys() > 0);
+                self.node_replace_n_kid(&mut new, node, idx, &vec![update_node]);
+            }
         }
-        todo!()
+        Some(new)
     }
     fn should_merge(&self, parent: &BNode, child: &BNode, idx: u16) -> Option<(i8, BNode)> {
         if child.n_bytes() > BTREE_PAGE_SIZE as u16 / 4 {
