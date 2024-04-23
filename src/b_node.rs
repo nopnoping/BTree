@@ -204,6 +204,7 @@ impl BNode {
 
     // merge a node
     pub fn merge(&mut self, left: &Self, right: &Self) {
+        self.resize((left.n_bytes() + right.n_bytes()) as usize);
         self.set_header(left.n_type(), left.n_keys() + right.n_keys());
         self.copy_range(left, 0, 0, left.n_keys());
         self.copy_range(right, left.n_keys(), 0, right.n_keys());
@@ -369,6 +370,19 @@ mod tests {
         assert_eq!(v[1].get_val(0), &[0x22; BTREE_MAX_VAL_SIZE]);
         assert_eq!(v[2].get_key(0), &[0x33; BTREE_MAX_KEY_SIZE]);
         assert_eq!(v[2].get_val(0), &[0x33; BTREE_MAX_VAL_SIZE]);
+    }
+
+    #[test]
+    fn test_merge() {
+        let mut node1 = BNode::new_with_data(domain_data());
+        let mut node2 = BNode::new_with_data(domain_data());
+        let mut node3 = BNode::new_with_cap(0);
+        node3.merge(&node1, &node2);
+        assert_eq!(node3.n_keys(), node1.n_keys() + node2.n_keys());
+        assert_eq!(node3.get_key(0), node1.get_key(0));
+        assert_eq!(node3.get_key(1), node1.get_key(1));
+        assert_eq!(node3.get_key(0), node2.get_key(0));
+        assert_eq!(node3.get_key(1), node2.get_key(1));
     }
 }
 

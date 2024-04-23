@@ -182,14 +182,14 @@ impl BTree {
 
         if idx > 0 {
             let sibling = (self.get)(parent.get_ptr(idx - 1));
-            if sibling.n_bytes() + child.n_bytes() - HEADER <= BTREE_PAGE_SIZE as u16 {
+            if sibling.n_bytes() + child.n_bytes() - HEADER as u16 <= BTREE_PAGE_SIZE as u16 {
                 return Some((-1, sibling));
             }
         }
 
         if idx + 1 < parent.n_keys() {
             let sibling = (self.get)(parent.get_ptr(idx + 1));
-            if sibling.n_bytes() + child.n_bytes() - HEADER <= BTREE_PAGE_SIZE as u16 {
+            if sibling.n_bytes() + child.n_bytes() - HEADER as u16 <= BTREE_PAGE_SIZE as u16 {
                 return Some((1, sibling));
             }
         }
