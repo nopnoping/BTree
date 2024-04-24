@@ -171,7 +171,7 @@ impl BNode {
         }
         let (mut left, right) = self.split2();
         if left.n_bytes() <= BTREE_PAGE_SIZE as u16 {
-            left.resize(0);
+            left.resize(BTREE_PAGE_SIZE);
             return vec![left, right];
         }
         let (left, middle) = left.split2();
