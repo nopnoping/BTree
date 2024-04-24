@@ -1,4 +1,5 @@
 use crate::common::{BTREE_PAGE_SIZE, HEADER};
+use crate::little_endian::LittleEndian;
 
 #[derive(Eq, PartialEq, Debug)]
 pub enum BType {
@@ -212,33 +213,15 @@ impl BNode {
 }
 
 // little endian
-impl BNode {
+impl LittleEndian for BNode {
     fn read_u16(&self, start: usize) -> u16 {
         let low = self.data[start] as u16;
         let hi = self.data[start + 1] as u16;
         low | (hi << 8)
     }
-    fn read_u32(&self, start: usize) -> u32 {
-        let low = self.read_u16(start) as u32;
-        let hi = self.read_u16(start + 2) as u32;
-        low | (hi << 16)
-    }
-    fn read_u64(&self, start: usize) -> u64 {
-        let low = self.read_u32(start) as u64;
-        let hi = self.read_u32(start + 4) as u64;
-        low | (hi << 32)
-    }
     fn write_u16(&mut self, start: usize, data: u16) {
         self.data[start] = (data & 0xff) as u8;
         self.data[start + 1] = (data >> 8) as u8;
-    }
-    fn write_u32(&mut self, start: usize, data: u32) {
-        self.write_u16(start, (data & 0xffff) as u16);
-        self.write_u16(start + 2, (data >> 16) as u16);
-    }
-    fn write_u64(&mut self, start: usize, data: u64) {
-        self.write_u32(start, (data & 0xffffffff) as u32);
-        self.write_u32(start + 2, (data >> 32) as u32);
     }
 }
 
