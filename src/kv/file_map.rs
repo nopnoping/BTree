@@ -10,6 +10,7 @@ use nix::libc::{munmap, off_t};
 use nix::sys::mman::{MapFlags, mmap, MsFlags, msync, ProtFlags};
 
 use crate::common::{BTREE_PAGE_SIZE, SYS_PAGE_SIZE};
+use crate::little_endian::LittleEndian;
 
 pub struct FileMap {
     ptr: NonNull<c_void>,
@@ -65,6 +66,25 @@ impl Drop for FileMap {
         unsafe {
             munmap(self.ptr.as_ptr(), self.size);
         }
+    }
+}
+
+impl LittleEndian for FileMap {
+    fn read_u16(&self, start: usize) -> u16 {
+        let data = unsafe {
+            &mut from_raw_parts_mut(self.ptr.as_ptr() as *mut u8, self.size)[start..start + 2]
+        };
+        data[0] as u16 | (data[0] << 8) as u16
+    }
+
+    fn write_u16(&mut self, start: usize, data: u16) {
+        let low = (data & 0xff) as u8;
+        let hi = (data >> 8) as u8;
+        let data = unsafe {
+            &mut from_raw_parts_mut(self.ptr.as_ptr() as *mut u8, self.size)[start..start + 2]
+        };
+        data[0] = low;
+        data[1] = hi;
     }
 }
 

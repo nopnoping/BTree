@@ -9,7 +9,7 @@ struct BTree {
 impl BTree {
     pub fn new(persist: Box<dyn Persist>) -> Self {
         BTree {
-            root: 0,
+            root: persist.get_root(),
             persist,
         }
     }

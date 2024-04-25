@@ -103,7 +103,7 @@ impl BNode {
             self.data[start as usize + i] = val[i];
         }
     }
-    fn get_bytes(&self, start: u16, end: u16) -> &[u8] {
+    pub fn get_bytes(&self, start: u16, end: u16) -> &[u8] {
         assert!(end as usize <= self.data.len());
         &self.data[start as usize..end as usize]
     }

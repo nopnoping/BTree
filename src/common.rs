@@ -17,6 +17,9 @@ pub trait Persist {
     fn new(&mut self, node: &BNode) -> u64;
     fn del(&mut self, ptr: u64);
     fn len(&self) -> usize;
+    fn get_root(&self) -> u64;
+    fn set_root(&mut self, root: u64);
+    fn flush(&mut self);
 }
 
 fn get_page_size() -> usize {
