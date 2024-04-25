@@ -7,3 +7,5 @@ edition = "2021"
 
 [dependencies]
 byteorder = "1.5.0"
+nix = { version = "0.28.0", features = ["mman", "fs"] }
+lazy_static = "1.4.0"

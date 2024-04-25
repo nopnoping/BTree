@@ -1,16 +1,9 @@
 use crate::b_node::{BNode, BType};
-use crate::common::{BTREE_MAX_KEY_SIZE, BTREE_MAX_VAL_SIZE, BTREE_PAGE_SIZE, HEADER};
+use crate::common::{BTREE_MAX_KEY_SIZE, BTREE_MAX_VAL_SIZE, BTREE_PAGE_SIZE, HEADER, Persist};
 
 struct BTree {
     root: u64,
     persist: Box<dyn Persist>,
-}
-
-trait Persist {
-    fn get(&self, ptr: u64) -> BNode;
-    fn new(&mut self, node: &BNode) -> u64;
-    fn del(&mut self, ptr: u64);
-    fn len(&self) -> usize;
 }
 
 impl BTree {
