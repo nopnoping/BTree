@@ -59,7 +59,7 @@ impl Persist for KV {
 
     fn flush(&mut self) {
         self.write_temp_to_map();
-        self.flushed
+        self.flushed();
     }
 }
 
