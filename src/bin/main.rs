@@ -1,4 +1,18 @@
 fn main() {
-    let mut rdr: Vec<u8> = Vec::with_capacity(2);
-    println!("{}", rdr.len())
+    let mut s = String::from("");
+    {
+        let st = String::from("wdad");
+        s = st;
+    }
+    println!("{}", s)
+}
+
+struct A {
+    callback: fn() -> (),
+}
+
+struct B {}
+
+impl B {
+    fn test() {}
 }
