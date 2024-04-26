@@ -136,6 +136,7 @@ mod tests {
     use std::fs::OpenOptions;
     use std::io::Write;
 
+    use crate::b_node::BNode;
     use crate::common::{BTREE_PAGE_SIZE, Persist};
     use crate::kv::{DB_SIG, KV};
 
@@ -152,6 +153,15 @@ mod tests {
         file.flush().unwrap();
     }
 
+    fn node_data() -> Vec<u8> {
+        vec![0x01, 0x00, // type
+             0x01, 0x00, // n key
+             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // ptr
+             0x06, 0x00, // offset
+             0x01, 0x00, 0x01, 0x00, 0xac, 0xac, // kv
+        ]
+    }
+
     #[test]
     fn test_new() {
         init();
@@ -164,6 +174,19 @@ mod tests {
     fn test_new_node() {
         init();
         let mut kv = KV::new(String::from("test")).unwrap();
-        // let ptr = kv.new_node();
+        let ptr = kv.new_node(&BNode::new_with_data(node_data()));
+        assert_eq!(ptr, 1);
+        kv.flush();
+        assert_eq!(kv.flushed, 2);
+        assert_eq!(kv.get_node(ptr).get_key(0), &[0xac]);
+    }
+
+    #[test]
+    fn test_root() {
+        init();
+        let mut kv = KV::new(String::from("test")).unwrap();
+        kv.set_root(1);
+        kv.flush();
+        assert_eq!(kv.get_root(), 1);
     }
 }
