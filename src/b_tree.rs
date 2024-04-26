@@ -22,7 +22,7 @@ impl BTree {
             return None;
         }
 
-        let k_node = self.persist.get(self.root);
+        let k_node = self.persist.get_node(self.root);
         self.tree_get(&k_node, key)
     }
     // delete a key from root
@@ -33,16 +33,16 @@ impl BTree {
             return false;
         }
 
-        let k_node = self.persist.get(self.root);
+        let k_node = self.persist.get_node(self.root);
         let r = self.tree_delete(&k_node, key);
         match r {
             None => false,
             Some(node) => {
-                self.persist.del(self.root);
+                self.persist.del_node(self.root);
                 if node.n_type() == BType::Node && node.n_keys() == 1 {
                     self.root = node.get_ptr(0);
                 } else {
-                    self.root = self.persist.new(&node);
+                    self.root = self.persist.new_node(&node);
                 }
                 self.persist.set_root(self.root);
                 self.persist.flush();
@@ -61,12 +61,12 @@ impl BTree {
             root_node.set_header(BType::LEAF, 2);
             root_node.insert_kv(0, 0, &[], &[]);
             root_node.insert_kv(1, 0, key, val);
-            self.root = self.persist.new(&root_node);
+            self.root = self.persist.new_node(&root_node);
             return;
         }
 
-        let old = self.persist.get(self.root);
-        self.persist.del(self.root);
+        let old = self.persist.get_node(self.root);
+        self.persist.del_node(self.root);
 
         let childs = self.tree_insert(&old, key, val).split();
         if childs.len() > 1 {
@@ -74,12 +74,12 @@ impl BTree {
             root_node.set_header(BType::Node, childs.len() as u16);
             for i in 0..childs.len() as u16 {
                 let key = childs[i as usize].get_key(0);
-                let ptr = self.persist.new(&childs[i as usize]);
+                let ptr = self.persist.new_node(&childs[i as usize]);
                 root_node.insert_kv(i, ptr, key, &[]);
             }
-            self.root = self.persist.new(&root_node);
+            self.root = self.persist.new_node(&root_node);
         } else {
-            self.root = self.persist.new(&childs[0]);
+            self.root = self.persist.new_node(&childs[0]);
         }
         self.persist.set_root(self.root);
         self.persist.flush();
@@ -91,7 +91,7 @@ impl BTree {
         match node.n_type() {
             BType::Node => {
                 let ptr = node.get_ptr(idx);
-                let k_node = self.persist.get(ptr);
+                let k_node = self.persist.get_node(ptr);
                 self.tree_get(&k_node, key)
             }
             BType::LEAF => {
@@ -161,8 +161,8 @@ impl BTree {
     fn node_insert(&mut self, new: &mut BNode, old: &BNode, idx: u16, key: &[u8], val: &[u8]) {
         // get next level node
         let k_ptr = old.get_ptr(idx);
-        let mut k_node = self.persist.get(k_ptr);
-        self.persist.del(k_ptr);
+        let mut k_node = self.persist.get_node(k_ptr);
+        self.persist.del_node(k_ptr);
         // insert
         k_node = self.tree_insert(&mut k_node, key, val);
         // split
@@ -172,10 +172,10 @@ impl BTree {
     }
     fn node_delete(&mut self, node: &BNode, idx: u16, key: &[u8]) -> Option<BNode> {
         let k_ptr = node.get_ptr(idx);
-        let k_node = self.persist.get(k_ptr);
+        let k_node = self.persist.get_node(k_ptr);
         let update_node = self.tree_delete(&k_node, key)?;
 
-        self.persist.del(k_ptr);
+        self.persist.del_node(k_ptr);
 
         let mut new = BNode::new_with_cap(BTREE_PAGE_SIZE);
         match self.should_merge(node, &update_node, idx) {
@@ -183,13 +183,13 @@ impl BTree {
                 let mut merged_child = BNode::new_with_cap(BTREE_PAGE_SIZE);
                 if dir < 0 {
                     merged_child.merge(&sibling, &update_node);
-                    self.persist.del(node.get_ptr(idx - 1));
-                    let ptr = self.persist.new(&merged_child);
+                    self.persist.del_node(node.get_ptr(idx - 1));
+                    let ptr = self.persist.new_node(&merged_child);
                     self.node_replace_2_kid(&mut new, node, idx - 1, ptr, merged_child.get_key(0));
                 } else {
                     merged_child.merge(&update_node, &sibling);
-                    self.persist.del(node.get_ptr(idx + 1));
-                    let ptr = self.persist.new(&merged_child);
+                    self.persist.del_node(node.get_ptr(idx + 1));
+                    let ptr = self.persist.new_node(&merged_child);
                     self.node_replace_2_kid(&mut new, node, idx, ptr, merged_child.get_key(0));
                 }
             }
@@ -204,7 +204,7 @@ impl BTree {
         new.set_header(BType::Node, old.n_keys() + childs.len() as u16 - 1);
         new.copy_range(old, 0, 0, idx);
         for i in 0..childs.len() as u16 {
-            new.insert_kv(idx + i, self.persist.new(&childs[i as usize]), childs[i as usize].get_key(0), &[]);
+            new.insert_kv(idx + i, self.persist.new_node(&childs[i as usize]), childs[i as usize].get_key(0), &[]);
         }
         new.copy_range(old, idx + childs.len() as u16, idx + 1, old.n_keys() - (idx + 1));
     }
@@ -222,14 +222,14 @@ impl BTree {
         }
 
         if idx > 0 {
-            let sibling = self.persist.get(parent.get_ptr(idx - 1));
+            let sibling = self.persist.get_node(parent.get_ptr(idx - 1));
             if sibling.n_bytes() + child.n_bytes() - HEADER as u16 <= BTREE_PAGE_SIZE as u16 {
                 return Some((-1, sibling));
             }
         }
 
         if idx + 1 < parent.n_keys() {
-            let sibling = self.persist.get(parent.get_ptr(idx + 1));
+            let sibling = self.persist.get_node(parent.get_ptr(idx + 1));
             if sibling.n_bytes() + child.n_bytes() - HEADER as u16 <= BTREE_PAGE_SIZE as u16 {
                 return Some((1, sibling));
             }
@@ -263,18 +263,18 @@ mod tests {
     }
 
     impl Persist for MockPersist {
-        fn get(&self, ptr: u64) -> BNode {
+        fn get_node(&self, ptr: u64) -> BNode {
             let node = self.pages.get(&ptr).unwrap();
             node.clone()
         }
 
-        fn new(&mut self, node: &BNode) -> u64 {
+        fn new_node(&mut self, node: &BNode) -> u64 {
             self.incr += 1;
             self.pages.insert(self.incr, node.clone());
             self.incr
         }
 
-        fn del(&mut self, ptr: u64) {
+        fn del_node(&mut self, ptr: u64) {
             self.pages.remove(&ptr).unwrap();
         }
 
@@ -322,10 +322,10 @@ mod tests {
         let mut mock = MockDB::new();
         mock.add("cafe".as_bytes(), "cafe_val".as_bytes());
         mock.add("cafe1".as_bytes(), "cafe_val1".as_bytes());
-        assert_eq!(mock.tree.persist.get(2).get_key(1), "cafe".as_bytes());
-        assert_eq!(mock.tree.persist.get(2).get_val(1), "cafe_val".as_bytes());
-        assert_eq!(mock.tree.persist.get(2).get_key(2), "cafe1".as_bytes());
-        assert_eq!(mock.tree.persist.get(2).get_val(2), "cafe_val1".as_bytes());
+        assert_eq!(mock.tree.persist.get_node(2).get_key(1), "cafe".as_bytes());
+        assert_eq!(mock.tree.persist.get_node(2).get_val(1), "cafe_val".as_bytes());
+        assert_eq!(mock.tree.persist.get_node(2).get_key(2), "cafe1".as_bytes());
+        assert_eq!(mock.tree.persist.get_node(2).get_val(2), "cafe_val1".as_bytes());
 
         assert_eq!(mock.tree.get("cafe".as_bytes()).unwrap(), "cafe_val".as_bytes().to_vec());
         assert_eq!(mock.tree.get("cafe1".as_bytes()).unwrap(), "cafe_val1".as_bytes().to_vec());
@@ -338,19 +338,19 @@ mod tests {
         mock.add(&[0xff; BTREE_MAX_KEY_SIZE], &[0xff; BTREE_MAX_VAL_SIZE]);
         mock.add(&[0xdf; BTREE_MAX_KEY_SIZE], &[0xdf; BTREE_MAX_VAL_SIZE]);
         assert_eq!(mock.tree.persist.len(), 4);
-        assert_eq!(mock.tree.persist.get(5).get_val(1), &[0xca; BTREE_MAX_VAL_SIZE]);
-        assert_eq!(mock.tree.persist.get(6).get_val(0), &[0xdf; BTREE_MAX_VAL_SIZE]);
-        assert_eq!(mock.tree.persist.get(3).get_val(0), &[0xff; BTREE_MAX_VAL_SIZE]);
+        assert_eq!(mock.tree.persist.get_node(5).get_val(1), &[0xca; BTREE_MAX_VAL_SIZE]);
+        assert_eq!(mock.tree.persist.get_node(6).get_val(0), &[0xdf; BTREE_MAX_VAL_SIZE]);
+        assert_eq!(mock.tree.persist.get_node(3).get_val(0), &[0xff; BTREE_MAX_VAL_SIZE]);
 
 
-        assert_eq!(mock.tree.persist.get(5).n_type(), BType::LEAF);
-        assert_eq!(mock.tree.persist.get(6).n_type(), BType::LEAF);
-        assert_eq!(mock.tree.persist.get(3).n_type(), BType::LEAF);
-        assert_eq!(mock.tree.persist.get(7).n_type(), BType::Node);
+        assert_eq!(mock.tree.persist.get_node(5).n_type(), BType::LEAF);
+        assert_eq!(mock.tree.persist.get_node(6).n_type(), BType::LEAF);
+        assert_eq!(mock.tree.persist.get_node(3).n_type(), BType::LEAF);
+        assert_eq!(mock.tree.persist.get_node(7).n_type(), BType::Node);
 
-        assert_eq!(mock.tree.persist.get(7).get_ptr(0), 5);
-        assert_eq!(mock.tree.persist.get(7).get_ptr(1), 6);
-        assert_eq!(mock.tree.persist.get(7).get_ptr(2), 3);
+        assert_eq!(mock.tree.persist.get_node(7).get_ptr(0), 5);
+        assert_eq!(mock.tree.persist.get_node(7).get_ptr(1), 6);
+        assert_eq!(mock.tree.persist.get_node(7).get_ptr(2), 3);
     }
 
     // delete test
@@ -362,9 +362,9 @@ mod tests {
         mock.add(&[0xff], &[0xff]);
         mock.del(&[0xff]);
         assert_eq!(mock.tree.persist.len(), 3);
-        assert_eq!(mock.tree.persist.get(7).n_keys(), 1);
-        assert_eq!(mock.tree.persist.get(7).get_key(0), &[0xdf; BTREE_MAX_KEY_SIZE - 0x100]);
-        assert_eq!(mock.tree.persist.get(8).n_type(), BType::Node);
+        assert_eq!(mock.tree.persist.get_node(7).n_keys(), 1);
+        assert_eq!(mock.tree.persist.get_node(7).get_key(0), &[0xdf; BTREE_MAX_KEY_SIZE - 0x100]);
+        assert_eq!(mock.tree.persist.get_node(8).n_type(), BType::Node);
     }
 
     #[test]
@@ -374,8 +374,8 @@ mod tests {
         mock.add(&[0xff; BTREE_MAX_KEY_SIZE], &[0xff; BTREE_MAX_VAL_SIZE]);
         mock.del(&[0xff; BTREE_MAX_KEY_SIZE]);
         assert_eq!(mock.tree.persist.len(), 1);
-        assert_eq!(mock.tree.persist.get(5).n_type(), BType::LEAF);
-        assert_eq!(mock.tree.persist.get(5).get_key(1), &[0xca; BTREE_MAX_KEY_SIZE]);
+        assert_eq!(mock.tree.persist.get_node(5).n_type(), BType::LEAF);
+        assert_eq!(mock.tree.persist.get_node(5).get_key(1), &[0xca; BTREE_MAX_KEY_SIZE]);
     }
 
     #[test]
@@ -385,8 +385,8 @@ mod tests {
         mock.add(&[0xff; BTREE_MAX_KEY_SIZE], &[0xff; BTREE_MAX_VAL_SIZE]);
         mock.del(&[0xca; BTREE_MAX_KEY_SIZE]);
         assert_eq!(mock.tree.persist.len(), 1);
-        assert_eq!(mock.tree.persist.get(5).n_type(), BType::LEAF);
-        assert_eq!(mock.tree.persist.get(5).get_key(1), &[0xff; BTREE_MAX_KEY_SIZE]);
+        assert_eq!(mock.tree.persist.get_node(5).n_type(), BType::LEAF);
+        assert_eq!(mock.tree.persist.get_node(5).get_key(1), &[0xff; BTREE_MAX_KEY_SIZE]);
     }
 }
 

@@ -18,14 +18,15 @@ struct KV {
     map_size: usize,
     // file map
     file_maps: Vec<FileMap>,
-    // temp BNode, in mem, no disk
     flushed: u64,
+    // temp BNode, in mem, no disk
     temp: Vec<BNode>,
+
     root: u64,
 }
 
 impl Persist for KV {
-    fn get(&self, ptr: u64) -> BNode {
+    fn get_node(&self, ptr: u64) -> BNode {
         let row = ptr as usize / (*SYS_PAGE_SIZE / BTREE_PAGE_SIZE);
         let col = ptr as usize % (*SYS_PAGE_SIZE / BTREE_PAGE_SIZE);
         assert!(row < self.file_maps.len());
@@ -33,13 +34,13 @@ impl Persist for KV {
         BNode::new_with_data(x.to_vec())
     }
 
-    fn new(&mut self, node: &BNode) -> u64 {
+    fn new_node(&mut self, node: &BNode) -> u64 {
         let ptr = self.flushed + self.temp.len() as u64;
         self.temp.push(node.clone());
         ptr
     }
 
-    fn del(&mut self, ptr: u64) {
+    fn del_node(&mut self, ptr: u64) {
         // Todo
     }
 
@@ -54,7 +55,6 @@ impl Persist for KV {
     fn set_root(&mut self, root: u64) {
         self.root = root;
         self.file_maps[0].write_u64(16, root);
-        // self.file_maps[0].flush();
     }
 
     fn flush(&mut self) {
@@ -73,16 +73,16 @@ impl KV {
             .open(&path).unwrap();
 
         // file_map
-        let n = file.metadata().unwrap().len() as usize / *SYS_PAGE_SIZE + 1;
-        let mut v = Vec::new();
-        for i in 0..n {
-            v.push(FileMap::new(&file, *SYS_PAGE_SIZE, i * (*SYS_PAGE_SIZE)));
+        let n_sys_pages = file.metadata().unwrap().len() as usize / *SYS_PAGE_SIZE + 1;
+        let mut file_maps = Vec::new();
+        for i in 0..n_sys_pages {
+            file_maps.push(FileMap::new(&file, *SYS_PAGE_SIZE, i * (*SYS_PAGE_SIZE)));
         }
 
-        let master = v[0].read(0);
+        let master = file_maps[0].read(0);
         let sig = &master[..16];
-        let root = v[0].read_u64(16);
-        let used = v[0].read_u64(24);
+        let root = file_maps[0].read_u64(16);
+        let used = file_maps[0].read_u64(24);
 
         if sig != DB_SIG.as_bytes() {
             return Err(String::from("db sgi err"));
@@ -91,8 +91,8 @@ impl KV {
         let kv = KV {
             path,
             file,
-            map_size: (n * (*SYS_PAGE_SIZE)) as usize,
-            file_maps: v,
+            map_size: n_sys_pages * (*SYS_PAGE_SIZE),
+            file_maps,
             temp: Vec::new(),
             root,
             flushed: used,
@@ -101,15 +101,17 @@ impl KV {
     }
 
     pub fn write_temp_to_map(&mut self) {
-        let n = ((self.flushed as usize + self.temp.len()) / 4) as usize;
-        if n > self.file_maps.len() {
+        // new file map
+        let n_sys_pages = (self.flushed as usize + self.temp.len()) / ((*SYS_PAGE_SIZE) / BTREE_PAGE_SIZE);
+        if n_sys_pages > self.file_maps.len() {
             let offset = self.file_maps.len();
-            let new_map = self.file_maps.len() - n;
-            for i in 0..new_map {
+            let new_sys_pages = self.file_maps.len() - n_sys_pages;
+            for i in 0..new_sys_pages {
                 self.file_maps.push(FileMap::new(&self.file, *SYS_PAGE_SIZE, (i + offset) * (*SYS_PAGE_SIZE)));
             }
         }
 
+        // copy to file
         for _ in 0..self.temp.len() {
             let ptr = self.flushed;
             let row = ptr as usize / (*SYS_PAGE_SIZE / BTREE_PAGE_SIZE);
@@ -126,5 +128,42 @@ impl KV {
         for mut file_map in &mut self.file_maps {
             file_map.flush();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs::OpenOptions;
+    use std::io::Write;
+
+    use crate::common::{BTREE_PAGE_SIZE, Persist};
+    use crate::kv::{DB_SIG, KV};
+
+    fn init() {
+        let mut file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open("test").unwrap();
+        file.set_len(BTREE_PAGE_SIZE as u64).unwrap();
+        file.write_all(DB_SIG.as_bytes()).unwrap();
+        file.write_all(&[0x00; 8]).unwrap();
+        file.write_all(&[0x01]).unwrap();
+        file.flush().unwrap();
+    }
+
+    #[test]
+    fn test_new() {
+        init();
+        let mut kv = KV::new(String::from("test")).unwrap();
+        assert_eq!(kv.get_root(), 0);
+        assert_eq!(kv.flushed, 1);
+    }
+
+    #[test]
+    fn test_new_node() {
+        init();
+        let mut kv = KV::new(String::from("test")).unwrap();
+        // let ptr = kv.new_node();
     }
 }

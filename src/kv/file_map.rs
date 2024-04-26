@@ -80,7 +80,7 @@ impl LittleEndian for FileMap {
         let data = unsafe {
             &mut from_raw_parts_mut(self.ptr.as_ptr() as *mut u8, self.size)[start..start + 2]
         };
-        data[0] as u16 | ((data[0] as u16) << 8)
+        data[0] as u16 | ((data[1] as u16) << 8)
     }
 
     fn write_u16(&mut self, start: usize, data: u16) {

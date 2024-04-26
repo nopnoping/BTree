@@ -13,9 +13,9 @@ lazy_static! {
 }
 
 pub trait Persist {
-    fn get(&self, ptr: u64) -> BNode;
-    fn new(&mut self, node: &BNode) -> u64;
-    fn del(&mut self, ptr: u64);
+    fn get_node(&self, ptr: u64) -> BNode;
+    fn new_node(&mut self, node: &BNode) -> u64;
+    fn del_node(&mut self, ptr: u64);
     fn len(&self) -> usize;
     fn get_root(&self) -> u64;
     fn set_root(&mut self, root: u64);
