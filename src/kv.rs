@@ -54,7 +54,7 @@ impl Persist for KV {
     fn set_root(&mut self, root: u64) {
         self.root = root;
         self.file_maps[0].write_u64(16, root);
-        self.file_maps[0].flush();
+        // self.file_maps[0].flush();
     }
 
     fn flush(&mut self) {
@@ -118,10 +118,12 @@ impl KV {
             self.file_maps[row].write(col, node.get_bytes(0, node.n_bytes()));
             self.flushed += 1;
         }
+
+        self.file_maps[0].write_u64(24, self.flushed);
     }
 
     pub fn flush_map(&mut self) {
-        for file_map in self.file_maps {
+        for mut file_map in self.file_maps {
             file_map.flush();
         }
     }

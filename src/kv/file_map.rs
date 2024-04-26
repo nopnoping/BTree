@@ -16,6 +16,7 @@ pub struct FileMap {
     ptr: NonNull<c_void>,
     size: usize,
     offset: usize,
+    dirty: bool,
 }
 
 impl FileMap {
@@ -33,6 +34,7 @@ impl FileMap {
             ptr,
             size,
             offset,
+            dirty: false,
         }
     }
 
@@ -47,6 +49,7 @@ impl FileMap {
             &mut from_raw_parts_mut(self.ptr.as_ptr() as *mut u8, self.size)[pages_num * BTREE_PAGE_SIZE..(pages_num + 1) * BTREE_PAGE_SIZE]
         };
         file_data.write_all(data).unwrap();
+        self.dirty = true;
     }
     pub fn read(&self, pages_num: usize) -> &[u8] {
         assert!(pages_num < self.n_pages());
@@ -54,9 +57,12 @@ impl FileMap {
             &from_raw_parts_mut(self.ptr.as_ptr() as *mut u8, self.size)[pages_num * BTREE_PAGE_SIZE..(pages_num + 1) * BTREE_PAGE_SIZE]
         }
     }
-    pub fn flush(&self) {
-        unsafe {
-            msync(self.ptr, self.size, MsFlags::MS_SYNC).unwrap();
+    pub fn flush(&mut self) {
+        if self.dirty {
+            unsafe {
+                msync(self.ptr, self.size, MsFlags::MS_SYNC).unwrap();
+            }
+            self.dirty = false;
         }
     }
 }

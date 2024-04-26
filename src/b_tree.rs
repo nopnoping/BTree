@@ -13,6 +13,18 @@ impl BTree {
             persist,
         }
     }
+
+    // get a key from root
+    pub fn get(&self, key: &[u8]) -> Option<Vec<u8>> {
+        assert_ne!(key.len(), 0);
+        assert!(key.len() <= BTREE_MAX_KEY_SIZE);
+        if self.root == 0 {
+            return None;
+        }
+
+        let k_node = self.persist.get(self.root);
+        self.tree_get(&k_node, key)
+    }
     // delete a key from root
     pub fn delete(&mut self, key: &[u8]) -> bool {
         assert_ne!(key.len(), 0);
@@ -32,6 +44,8 @@ impl BTree {
                 } else {
                     self.root = self.persist.new(&node);
                 }
+                self.persist.set_root(self.root);
+                self.persist.flush();
                 true
             }
         }
@@ -67,8 +81,28 @@ impl BTree {
         } else {
             self.root = self.persist.new(&childs[0]);
         }
+        self.persist.set_root(self.root);
+        self.persist.flush();
     }
 
+    // get a kv from a node
+    fn tree_get(&self, node: &BNode, key: &[u8]) -> Option<Vec<u8>> {
+        let idx = node.lookup_le(key);
+        match node.n_type() {
+            BType::Node => {
+                let ptr = node.get_ptr(idx);
+                let k_node = self.persist.get(ptr);
+                self.tree_get(&k_node, key)
+            }
+            BType::LEAF => {
+                if key.cmp(node.get_key(idx)).is_eq() {
+                    Some(node.get_val(idx).to_vec())
+                } else {
+                    None
+                }
+            }
+        }
+    }
     // insert a kv from a node
     fn tree_insert(&mut self, node: &BNode, key: &[u8], val: &[u8]) -> BNode {
         let mut new_node = BNode::new_with_cap(2 * BTREE_PAGE_SIZE);
@@ -215,6 +249,7 @@ mod tests {
     struct MockPersist {
         pages: HashMap<u64, BNode>,
         incr: u64,
+        root: u64,
     }
 
     impl MockPersist {
@@ -222,6 +257,7 @@ mod tests {
             MockPersist {
                 pages: HashMap::new(),
                 incr: 0,
+                root: 0,
             }
         }
     }
@@ -245,6 +281,16 @@ mod tests {
         fn len(&self) -> usize {
             self.pages.len()
         }
+
+        fn get_root(&self) -> u64 {
+            self.root
+        }
+
+        fn set_root(&mut self, root: u64) {
+            self.root = root;
+        }
+
+        fn flush(&mut self) {}
     }
 
     // Mock db
