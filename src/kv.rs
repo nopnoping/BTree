@@ -26,8 +26,8 @@ struct KV {
 
 impl Persist for KV {
     fn get(&self, ptr: u64) -> BNode {
-        let row = (ptr / (*SYS_PAGE_SIZE / BTREE_PAGE_SIZE)) as usize;
-        let col = (ptr % (*SYS_PAGE_SIZE / BTREE_PAGE_SIZE)) as usize;
+        let row = ptr as usize / (*SYS_PAGE_SIZE / BTREE_PAGE_SIZE);
+        let col = ptr as usize % (*SYS_PAGE_SIZE / BTREE_PAGE_SIZE);
         assert!(row < self.file_maps.len());
         let x = self.file_maps[row].read(col);
         BNode::new_with_data(x.to_vec())
@@ -59,7 +59,7 @@ impl Persist for KV {
 
     fn flush(&mut self) {
         self.write_temp_to_map();
-        self.flushed();
+        self.flush_map();
     }
 }
 
@@ -73,10 +73,10 @@ impl KV {
             .open(&path).unwrap();
 
         // file_map
-        let n = file.metadata().unwrap().len() / *SYS_PAGE_SIZE + 1;
+        let n = file.metadata().unwrap().len() as usize / *SYS_PAGE_SIZE + 1;
         let mut v = Vec::new();
         for i in 0..n {
-            v.push(FileMap::new(&file, *SYS_PAGE_SIZE, (i * (*SYS_PAGE_SIZE)) as usize));
+            v.push(FileMap::new(&file, *SYS_PAGE_SIZE, i * (*SYS_PAGE_SIZE)));
         }
 
         let master = v[0].read(0);
@@ -101,7 +101,7 @@ impl KV {
     }
 
     pub fn write_temp_to_map(&mut self) {
-        let n = ((self.flushed + self.temp.len()) / 4) as usize;
+        let n = ((self.flushed as usize + self.temp.len()) / 4) as usize;
         if n > self.file_maps.len() {
             let offset = self.file_maps.len();
             let new_map = self.file_maps.len() - n;
@@ -112,8 +112,8 @@ impl KV {
 
         for _ in 0..self.temp.len() {
             let ptr = self.flushed;
-            let row = (ptr / (*SYS_PAGE_SIZE / BTREE_PAGE_SIZE)) as usize;
-            let col = (ptr % (*SYS_PAGE_SIZE / BTREE_PAGE_SIZE)) as usize;
+            let row = ptr as usize / (*SYS_PAGE_SIZE / BTREE_PAGE_SIZE);
+            let col = ptr as usize % (*SYS_PAGE_SIZE / BTREE_PAGE_SIZE);
             let node = self.temp.pop().unwrap();
             self.file_maps[row].write(col, node.get_bytes(0, node.n_bytes()));
             self.flushed += 1;
@@ -123,7 +123,7 @@ impl KV {
     }
 
     pub fn flush_map(&mut self) {
-        for mut file_map in self.file_maps {
+        for mut file_map in &mut self.file_maps {
             file_map.flush();
         }
     }

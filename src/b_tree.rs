@@ -326,6 +326,9 @@ mod tests {
         assert_eq!(mock.tree.persist.get(2).get_val(1), "cafe_val".as_bytes());
         assert_eq!(mock.tree.persist.get(2).get_key(2), "cafe1".as_bytes());
         assert_eq!(mock.tree.persist.get(2).get_val(2), "cafe_val1".as_bytes());
+
+        assert_eq!(mock.tree.get("cafe".as_bytes()).unwrap(), "cafe_val".as_bytes().to_vec());
+        assert_eq!(mock.tree.get("cafe1".as_bytes()).unwrap(), "cafe_val1".as_bytes().to_vec());
     }
 
     #[test]
